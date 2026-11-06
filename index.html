@@ -78,6 +78,7 @@
         </aside>
 
         <main class="flex-1 flex flex-col overflow-hidden bg-slate-100">
+            <div id="cloud-banner" class="hidden bg-rose-600 text-white text-xs font-semibold px-4 py-2.5"></div>
             <div class="flex-1 p-3 sm:p-6 overflow-y-auto space-y-6 custom-scrollbar" id="main-content"></div>
         </main>
     </div>
@@ -111,6 +112,7 @@
         baseSnags.forEach(s => s.photos = []);
         roomSnags.forEach(s => s.photos = []);
 
+        const uploadErrors = {}; // "ws:ID" -> last upload error text (stays visible until next attempt)
         const uploading = {};   // "ws:ID" -> number of photos currently uploading
         let pendingSaves = 0;   // saves/uploads in flight (pauses auto-refresh so nothing is overwritten)
         let lastSync = null;
@@ -129,13 +131,29 @@
             finally { clearTimeout(t); }
         }
 
+        async function parseJSONResponse(res) {
+            const text = await res.text();
+            try { return JSON.parse(text); }
+            catch (e) { throw new Error('Google returned a web page instead of data. The script deployment must be set to "Anyone" and updated to a NEW VERSION.'); }
+        }
+
+        function friendlyError(err) {
+            const m = (err && err.message) || String(err);
+            if (/Failed to fetch|NetworkError|Load failed|aborted/i.test(m))
+                return 'Could not reach the Google script (no internet, or the deployment is not set to "Anyone"). ' + m;
+            return m;
+        }
+
+        function showBanner(msg) { const b = document.getElementById('cloud-banner'); b.textContent = msg; b.classList.remove('hidden'); }
+        function hideBanner() { document.getElementById('cloud-banner').classList.add('hidden'); }
+
         async function postJSON(payload, ms) {
             const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
             }, ms || 45000);
-            const data = await res.json();
+            const data = await parseJSONResponse(res);
             if (data.status !== 'success') {
                 const err = new Error(data.message || 'Server error');
                 err.code = data.code; err.photos = data.photos;
@@ -169,8 +187,10 @@
             setSync('syncing');
             try {
                 const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=getAll&t=' + Date.now(), {}, 30000);
-                const data = await res.json();
-                if (data.status !== 'success') throw new Error(data.message || 'Bad response');
+                const data = await parseJSONResponse(res);
+                if (data.status !== 'success') throw new Error('The deployed script is the OLD version (it has no "getAll"). Deploy > Manage deployments > Edit > New version > Deploy.');
+                if (pendingSaves > 0) return; // an upload/save started while this was loading: ignore the stale copy
+                hideBanner();
                 try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
                 const changed = applyCloud(data);
                 lastSync = new Date();
@@ -181,6 +201,7 @@
             } catch (err) {
                 console.error('Cloud load failed:', err);
                 setSync('offline');
+                showBanner('Not connected to Google Sheet/Drive: ' + friendlyError(err));
                 if (manual) showToast('Could not reach Google - showing last saved data.');
             }
         }
@@ -279,15 +300,25 @@
         }
 
         async function handlePhotoUpload(ws, id, input) {
-            const files = Array.from(input.files || []);
-            input.value = '';
-            if (!files.length) return;
+            const picked = Array.from(input.files || []);
+            if (!picked.length) return;
             const s = findItem(ws, id);
             const k = pk(ws, id);
             const free = MAX_PHOTOS - (s.photos.length + (uploading[k] || 0));
-            if (free <= 0) { alert('Maximum of ' + MAX_PHOTOS + ' photos reached for ' + id + '.'); return; }
-            const queue = files.slice(0, free);
-            if (files.length > free) alert('Only ' + free + ' more photo(s) allowed for ' + id + ' (max ' + MAX_PHOTOS + '). The first ' + free + ' will be uploaded.');
+            if (free <= 0) { input.value = ''; alert('Maximum of ' + MAX_PHOTOS + ' photos reached for ' + id + '.'); return; }
+            if (picked.length > free) alert('Only ' + free + ' more photo(s) allowed for ' + id + ' (max ' + MAX_PHOTOS + '). The first ' + free + ' will be uploaded.');
+            // Copy the chosen files into memory BEFORE the screen re-draws (some phones drop the file once the picker is removed)
+            const queue = [];
+            try {
+                for (const f of picked.slice(0, free)) queue.push(new File([await f.arrayBuffer()], f.name || 'photo.jpg', { type: f.type || 'image/jpeg' }));
+            } catch (err) {
+                input.value = '';
+                uploadErrors[k] = 'Could not read the selected photo: ' + err.message;
+                refreshPhotoCell(ws, id);
+                return;
+            }
+            input.value = '';
+            delete uploadErrors[k];
 
             uploading[k] = (uploading[k] || 0) + queue.length;
             refreshPhotoCell(ws, id);
@@ -306,7 +337,8 @@
                     s.photos = data.photos; ok++;
                 } catch (err) {
                     console.error('Upload failed:', err);
-                    fail++; lastErr = err.message;
+                    fail++; lastErr = friendlyError(err);
+                    uploadErrors[k] = lastErr;
                     if (err.photos) s.photos = err.photos;
                 }
                 uploading[k]--;
@@ -355,7 +387,8 @@
                     <i class="fa-solid fa-camera mr-1"></i> Add Photos (${used}/${MAX_PHOTOS})
                     <input type="file" multiple accept="image/*,.pdf" class="hidden" onchange="handlePhotoUpload('${ws}','${s.id}',this)">
                 </label>` : `<span class="text-[10px] text-amber-600 font-semibold">Max ${MAX_PHOTOS} photos reached</span>`;
-            return `<div class="flex flex-wrap gap-1.5 mb-1.5">${thumbs}${spinners}</div>${action}`;
+            const errLine = uploadErrors[pk(ws, s.id)] ? `<div class="mt-1.5 text-[10px] leading-snug text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">Upload NOT saved: ${esc(uploadErrors[pk(ws, s.id)])}</div>` : '';
+            return `<div class="flex flex-wrap gap-1.5 mb-1.5">${thumbs}${spinners}</div>${action}${errLine}`;
         }
 
         function refreshPhotoCell(ws, id) {
