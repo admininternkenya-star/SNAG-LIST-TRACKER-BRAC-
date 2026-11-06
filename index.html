@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Atrium Fit-Out - Master Snag List Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        teal: { 800: '#115e59', 900: '#134e4a', 950: '#042f2e' },
+                        brand: { 500: '#0d9488', 600: '#0f766e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-full bg-slate-100 text-slate-800 antialiased flex flex-col">
+
+    <header class="bg-teal-900 text-white px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between border-b border-teal-800 shadow-md shrink-0 gap-3">
+        <div class="flex items-center space-x-3">
+            <div class="bg-brand-500 text-white p-2.5 rounded-xl shadow">
+                <i class="fa-solid fa-clipboard-list text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-base sm:text-lg leading-tight">The Atrium Fit-Out - Master Snag List Tracker</h1>
+                <p class="text-[11px] sm:text-xs text-slate-300">Africa Regional Office (Hurlingham - 7,880 sq ft | BoQ V6 & Option 04)</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <span id="sync-status" class="text-xs text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl font-mono flex items-center space-x-1.5"><i class="fa-solid fa-spinner fa-spin"></i><span>Syncing...</span></span>
+            <button onclick="loadFromCloud(true)" title="Refresh from Google Sheet & Drive" class="bg-teal-800 hover:bg-teal-700 text-white text-xs px-3 py-2 rounded-xl shadow"><i class="fa-solid fa-rotate"></i></button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <aside class="w-full lg:w-80 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800">
+            <nav class="p-3 sm:p-4 space-y-2 overflow-y-auto custom-scrollbar flex lg:flex-col flex-row gap-2">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1 hidden lg:block">Master Workspaces</div>
+                
+                <button onclick="switchWorkspace('base')" id="nav-base" class="flex-1 lg:flex-none flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl text-xs font-semibold bg-teal-900 text-white shadow-md transition-all">
+                    <div class="flex items-center space-x-2 sm:space-x-3">
+                        <i class="fa-solid fa-layer-group text-brand-500 text-base"></i>
+                        <span class="text-left truncate">1) Base Floor Works (BoQ V6)</span>
+                    </div>
+                    <span id="badge-base" class="bg-teal-950 text-xs px-2 py-0.5 rounded-full font-mono">0</span>
+                </button>
+
+                <button onclick="switchWorkspace('rooms')" id="nav-rooms" class="flex-1 lg:flex-none flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
+                    <div class="flex items-center space-x-2 sm:space-x-3">
+                        <i class="fa-solid fa-building text-amber-400 text-base"></i>
+                        <span class="text-left truncate">2) Room Audit (ToR & Option 04)</span>
+                    </div>
+                    <span id="badge-rooms" class="bg-slate-800 text-xs px-2 py-0.5 rounded-full font-mono">0</span>
+                </button>
+            </nav>
+
+            <div class="p-4 bg-slate-950 border-t border-slate-800 text-xs space-y-2 hidden lg:block">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400 font-semibold">Overall Snag Status</span>
+                    <span id="completion-rate" class="text-emerald-400 font-bold bg-emerald-950 border border-emerald-800 px-2 py-0.5 rounded">0% Resolved</span>
+                </div>
+                <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+                    <div id="progress-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-hidden bg-slate-100">
+            <div class="flex-1 p-3 sm:p-6 overflow-y-auto space-y-6 custom-scrollbar" id="main-content"></div>
+        </main>
+    </div>
+
+    <div id="preview-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 id="preview-title" class="font-bold text-slate-900 text-base">Defect Photo / Cloud Evidence</h3>
+                <button onclick="closePreviewModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div id="preview-body" class="min-h-[220px] flex items-center justify-center bg-slate-50 rounded-xl p-4"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 right-6 bg-teal-900 text-white text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50 border border-slate-700">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <span id="toast-message">Action saved successfully.</span>
+    </div>
+
+    <script>
+        let currentWorkspace = 'base';
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcZ2rvOPwTD27WozstoEjdqBSae540HKnHzPIC5LW_dG0X8R5SK_uaXmncH4x11_yFgw/exec";
+        const MAX_PHOTOS = 5;
+        const CACHE_KEY = 'brac_snag_cloud_cache_v7';
+
+        const defaultBaseSnags = [{"id": "BASE-01", "desc": "Self levelling cement screed to existing floor slab", "category": "Civil & Flooring", "status": "Ongoing", "brand": "Custom Cement Mix", "unit": "Sqm", "qty": 745, "contractorNotes": "Screeding in progress across open cluster areas", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Verify moisture level prior to SPC laying", "photos": []}, {"id": "BASE-02", "desc": "Waterproof SPC flooring complete with 100mm skirting", "category": "Civil & Flooring", "status": "Pending", "brand": "Daspros (1220x183mm, 4mm+0.3mm wear + 1.0mm IXPE)", "unit": "Sqm", "qty": 745, "contractorNotes": "Materials delivered to site; awaiting screed drying", "contractorStatus": "Delivered", "bracConfirmation": "Pending Confirmation", "notes": "Check ceramic bead UV coat batch certificates", "photos": []}, {"id": "BASE-03", "desc": "200mm thick masonry stone walling complete with plaster on both sides", "category": "Civil & Masonry", "status": "Completed", "brand": "Local Quarry Stone", "unit": "Sqm", "qty": 20, "contractorNotes": "Masonry walling erected for wet & service boundary", "contractorStatus": "Completed", "bracConfirmation": "Confirmed", "notes": "Plaster finish smooth and level", "photos": []}, {"id": "BASE-04", "desc": "Ceramic tiling to kitchenette walls", "category": "Civil & Finishes", "status": "Not Started", "brand": "Twyford / Equivalent", "unit": "Sqm", "qty": 15, "contractorNotes": "Tiles on order; installation following cabinet prep", "contractorStatus": "Not Started", "bracConfirmation": "Pending Confirmation", "notes": "Confirm tile color alignment with brand palette", "photos": []}, {"id": "BASE-05", "desc": "Gypsum partitioning walls with framing & glass wool insulation (45dB)", "category": "Partitions", "status": "Ongoing", "brand": "Gyproc / Knauf (Glasswool insulated)", "unit": "Sqm", "qty": 500, "contractorNotes": "Stud framing complete in private offices; slab sealing under way", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Ensure acoustic seal at top track to soffit", "photos": []}, {"id": "BASE-06", "desc": "Glass partitioning walls with aluminum framing & frosted privacy film", "category": "Partitions", "status": "Not Started", "brand": "Custom Double Glazed Aluminium", "unit": "Sqm", "qty": 255, "contractorNotes": "Aluminum extrusions on site; glass panels being cut", "contractorStatus": "Framing Ready", "bracConfirmation": "Pending Confirmation", "notes": "Verify frosting height (1200mm to 1800mm band)", "photos": []}, {"id": "BASE-07", "desc": "Acoustic ceiling panels complete with aluminum grid & accessories", "category": "Ceiling", "status": "Ongoing", "brand": "Armstrong (Germany, 600x600x15mm White)", "unit": "Sqm", "qty": 745, "contractorNotes": "Grid hanging active in main open office hall", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Confirm 15mm panel thickness and noise coefficient", "photos": []}, {"id": "BASE-08", "desc": "Timber flush doors complete with frames, shutters & ironmongery", "category": "Doors & Joinery", "status": "Pending", "brand": "Hardwood Flush Doors", "unit": "No", "qty": 2, "contractorNotes": "Frames fixed at store & utility entrances", "contractorStatus": "Frames Fixed", "bracConfirmation": "Pending Confirmation", "notes": "Inspect lockset ironmongery sample", "photos": []}, {"id": "BASE-09", "desc": "Frameless glass doors complete with patch fittings & stainless handles", "category": "Doors & Joinery", "status": "Not Started", "brand": "12mm Toughened Glass", "unit": "No", "qty": 20, "contractorNotes": "Ordered as per final opening site measurements", "contractorStatus": "On Order", "bracConfirmation": "Pending Confirmation", "notes": "Check soft-close floor spring mechanism", "photos": []}, {"id": "BASE-10", "desc": "UPVC double glazed acoustic doors complete with ironmongery", "category": "Doors & Joinery", "status": "Not Started", "brand": "UPVC Acoustic Profile", "unit": "No", "qty": 11, "contractorNotes": "Manufacturing complete; dispatching to site", "contractorStatus": "Dispatched", "bracConfirmation": "Pending Confirmation", "notes": "Ensure double perimeter rubber weatherstripping", "photos": []}, {"id": "BASE-11", "desc": "Kitchen & Mother's room low level counter with granite top & cabinets", "category": "Joinery & Fittings", "status": "Not Started", "brand": "Granite & MDF Marine Board", "unit": "Lm", "qty": 16, "contractorNotes": "Carcass fabrication at workshop", "contractorStatus": "Off-site Fab", "bracConfirmation": "Pending Confirmation", "notes": "Verify polished black granite sample slab", "photos": []}, {"id": "BASE-12", "desc": "Kitchen high level storage cabinets with soft-close hinges", "category": "Joinery & Fittings", "status": "Not Started", "brand": "MDF Marine Board", "unit": "Lm", "qty": 6, "contractorNotes": "Workshop fabrication ongoing", "contractorStatus": "Off-site Fab", "bracConfirmation": "Pending Confirmation", "notes": "Ensure water-resistant edge banding", "photos": []}, {"id": "BASE-13", "desc": "BRAC reception main wall 3D branding design & acrylic installation", "category": "Branding & Signage", "status": "Not Started", "brand": "Custom Acrylic 3D Logo", "unit": "Ls", "qty": 1, "contractorNotes": "Artwork approved by BRAC communications team", "contractorStatus": "Artwork Approved", "bracConfirmation": "Confirmed", "notes": "Verify illuminated backlighting power point", "photos": []}, {"id": "BASE-14", "desc": "Wall skimming, priming & acrylic paint finish (2 coats)", "category": "Finishes & Decor", "status": "Ongoing", "brand": "Crown Paints Silk Finish", "unit": "Sqm", "qty": 1200, "contractorNotes": "First coat primer applied to masonry walls", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Color match shade code with BRAC brand book", "photos": []}, {"id": "BASE-15", "desc": "Zebra Blinds for perimeter open side facing windows", "category": "Finishes & Decor", "status": "Pending", "brand": "Zebra Dual Roller Blinds", "unit": "Sqm", "qty": 132, "contractorNotes": "Measurements taken for all perimeter window bays", "contractorStatus": "Measured", "bracConfirmation": "Pending Confirmation", "notes": "Inspect mechanism smooth operation and light lockout", "photos": []}, {"id": "BASE-16", "desc": "Electrical 1st & 2nd fix points (power, lighting, TV, CCTV, access)", "category": "Electrical MEP", "status": "Ongoing", "brand": "Conduits & Copper Cabling", "unit": "No", "qty": 385, "contractorNotes": "Conduiting complete; wire pulling 60% done", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Ensure separate circuit isolation for IT server line", "photos": []}, {"id": "BASE-17", "desc": "Electrical acoustic ceiling LED panel light fittings (600x600)", "category": "Electrical MEP", "status": "Not Started", "brand": "LED 40W 4000K Neutral White", "unit": "No", "qty": 140, "contractorNotes": "Fixtures delivered; awaiting ceiling grid drop", "contractorStatus": "Delivered", "bracConfirmation": "Pending Confirmation", "notes": "Verify min 500 lux output at desk height", "photos": []}, {"id": "BASE-18", "desc": "Electrical twin power socket outlet fittings (13A switched)", "category": "Electrical MEP", "status": "Not Started", "brand": "Schneider / Crabtree", "unit": "No", "qty": 175, "contractorNotes": "Faceplates on site", "contractorStatus": "Delivered", "bracConfirmation": "Pending Confirmation", "notes": "Check grounding earthing continuity", "photos": []}, {"id": "BASE-19", "desc": "Mains Distribution Boards (DB) rewiring & breaker load balance", "category": "Electrical MEP", "status": "Completed", "brand": "ABB / Schneider Breakers", "unit": "No", "qty": 4, "contractorNotes": "DB boxes rewired, labeled, and balanced", "contractorStatus": "Completed", "bracConfirmation": "Confirmed", "notes": "Test circuit breaker trip ratings", "photos": []}, {"id": "BASE-20", "desc": "CCTV camera system conduiting & CAT6 cabling containment", "category": "ICT & Security", "status": "Ongoing", "brand": "PVC Heavy Conduits", "unit": "Ls", "qty": 1, "contractorNotes": "Conduits laid along ceiling cable trays", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Check camera coverage angle over entrances", "photos": []}, {"id": "BASE-21", "desc": "CAT6A structured cabling & dual data outlet terminations", "category": "ICT & Security", "status": "Ongoing", "brand": "Siemon / Giganet CAT6A", "unit": "No", "qty": 20, "contractorNotes": "Cable runs terminated at server rack patch panel", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Perform Fluke DTX cable certification test", "photos": []}, {"id": "BASE-22", "desc": "ICT Server Room rack setup, patch panels & wire management", "category": "ICT & Security", "status": "Pending", "brand": "42U Server Rack Cabinet", "unit": "Ls", "qty": 1, "contractorNotes": "Server cabinet positioned; rack PDU installed", "contractorStatus": "Set Up", "bracConfirmation": "Pending Confirmation", "notes": "Verify 2kW spare electrical load & grounding", "photos": []}, {"id": "BASE-23", "desc": "Biometric access control doors (fingerprint, maglock, backup PSU)", "category": "ICT & Security", "status": "Not Started", "brand": "ZKTeco / Suprema System", "unit": "No", "qty": 2, "contractorNotes": "Maglocks mounted; wiring to PSU in progress", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Test battery backup override on main power cut", "photos": []}, {"id": "BASE-24", "desc": "Split A/C Unit for Server Room (18,000 BTU 24/7 dedicated)", "category": "Mechanical HVAC", "status": "Pending", "brand": "Haier HSU-18RC23CF (R32)", "unit": "No", "qty": 1, "contractorNotes": "Indoor/outdoor units mounted; piping pending", "contractorStatus": "Mounted", "bracConfirmation": "Pending Confirmation", "notes": "Ensure dual auto-restart module on power restoration", "photos": []}, {"id": "BASE-25", "desc": "Split A/C Unit for Regional Director Office (12,000 BTU)", "category": "Mechanical HVAC", "status": "Not Started", "brand": "Haier HSU-12RC23CF (R32)", "unit": "No", "qty": 1, "contractorNotes": "Unit on site", "contractorStatus": "Delivered", "bracConfirmation": "Pending Confirmation", "notes": "Inspect copper refrigerant pipe insulation", "photos": []}, {"id": "BASE-26", "desc": "Ceiling mounted ventilation fans for enclosed inner offices", "category": "Mechanical HVAC", "status": "Ongoing", "brand": "Tronic 6\" Square 37dB", "unit": "No", "qty": 42, "contractorNotes": "20 units mounted in duct openings", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Check low-noise output (<37dB) in quiet rooms", "photos": []}, {"id": "BASE-27", "desc": "Fire extinguishers (CO2 5kg & Dry Powder 6kg)", "category": "Fire & Safety", "status": "Not Started", "brand": "SafetyXpress Standard", "unit": "No", "qty": 6, "contractorNotes": "Wall brackets mounted", "contractorStatus": "Brackets Ready", "bracConfirmation": "Pending Confirmation", "notes": "Check pressure gauge level & inspection tag", "photos": []}, {"id": "BASE-28", "desc": "Battery operated optical smoke detectors in office ceiling void", "category": "Fire & Safety", "status": "Not Started", "brand": "Optical Smoke Detector", "unit": "No", "qty": 42, "contractorNotes": "Units delivered", "contractorStatus": "Delivered", "bracConfirmation": "Pending Confirmation", "notes": "Test interconnectivity alert alarm sound", "photos": []}, {"id": "BASE-29", "desc": "Emergency exit illuminated signage & emergency light fittings", "category": "Fire & Safety", "status": "Not Started", "brand": "LED Emergency Maintenance", "unit": "No", "qty": 6, "contractorNotes": "Wiring complete at exit doors", "contractorStatus": "Wiring Ready", "bracConfirmation": "Pending Confirmation", "notes": "Verify 3-hour battery backup duration", "photos": []}];
+        const defaultRoomSnags = [{"id": "RM-01", "roomName": "Regional Director Executive Suite", "zone": "Primary Operational", "status": "Ongoing", "brand": "Haier / Gyproc / Daspros", "torSpecs": "Self-contained corner suite, acoustic glass partition (≥45dB), internal washroom, 12k BTU AC", "pax": "1 Pax", "dimensions": "Corner Suite (~25 Sqm)", "contractorNotes": "Glass door mounted; plumbing connection to internal washroom underway", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Ensure complete acoustic isolation around door frame", "photos": []}, {"id": "RM-02", "roomName": "Director, Finance & Operations Office", "zone": "Primary Operational", "status": "Ongoing", "brand": "Gyproc / Tronic / Siemon", "torSpecs": "Acoustic insulation, natural light access, 4 workstations (1400x600mm), power & data drop", "pax": "4 Pax", "dimensions": "Standard Office (~16 Sqm)", "contractorNotes": "Gypsum framing fixed; wiring pulled for 4 desks", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Verify desk spacing permits comfortable chair clearance", "photos": []}, {"id": "RM-03", "roomName": "Director, HR Office", "zone": "Primary Operational", "status": "Ongoing", "brand": "Gyproc / Tronic / Crown Paints", "torSpecs": "Acoustic insulation, natural light, 4 workstations (1400x600mm), lockable file cabinet space", "pax": "4 Pax", "dimensions": "Standard Office (~16 Sqm)", "contractorNotes": "Gypsum board closed; skimming in progress", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Confirm storage cabinet alignment with wall plug", "photos": []}, {"id": "RM-04", "roomName": "Operations Director / Team Office", "zone": "Primary Operational", "status": "Ongoing", "brand": "Siemon / Schneider / Tronic", "torSpecs": "8 workstations (2400x600mm desks), high-density data trunking, ceiling ventilation fan", "pax": "8 Pax", "dimensions": "Large Office (~28 Sqm)", "contractorNotes": "Trunking installed along perimeter wall", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Test dual data sockets at each desk station", "photos": []}, {"id": "RM-05", "roomName": "Director Office - AIM", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Stud framing ready for gypsum boards", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Check natural daylight penetration from main corridor", "photos": []}, {"id": "RM-06", "roomName": "Director Office - UPG&L", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Inspect door swing direction", "photos": []}, {"id": "RM-07", "roomName": "Director Office - Finance & Ops (UPGI)", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Ensure 45dB glasswool batts packed in stud partition", "photos": []}, {"id": "RM-08", "roomName": "Associate Director Office - HR (BI MF)", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Check light switch placement beside entrance frame", "photos": []}, {"id": "RM-09", "roomName": "Head of HR Office - SBI", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Verify data point location near desk cable port", "photos": []}, {"id": "RM-10", "roomName": "Head of HR Office - UPGI", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Confirm ceiling exhaust fan duct connection", "photos": []}, {"id": "RM-11", "roomName": "Director Country Cluster - UPGI", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Inspect plaster skim finish on drywall", "photos": []}, {"id": "RM-12", "roomName": "Head of Finance - SBI", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Tronic 6\"", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Ensure power socket for desk printer/scanner", "photos": []}, {"id": "RM-13", "roomName": "Kenya Country Lead - UPGI", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / Zebra Blinds", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Check window blind fitment on perimeter wall", "photos": []}, {"id": "RM-14", "roomName": "Director Country Cluster - BI MF", "zone": "Primary Operational", "status": "Not Started", "brand": "Gyproc 45dB / UPVC Door", "torSpecs": "Private office, 1400x600mm desk provision, acoustic door, ceiling vent fan", "pax": "1 Pax", "dimensions": "Private Suite (~10 Sqm)", "contractorNotes": "Framing ready", "contractorStatus": "Framing Done", "bracConfirmation": "Pending Confirmation", "notes": "Verify door lock key cylinder system", "photos": []}, {"id": "RM-15", "roomName": "Chief of Staff (CoS) Office (Microfinance Zone)", "zone": "Primary Operational", "status": "Ongoing", "brand": "Gyproc / Crown / Armstrong", "torSpecs": "New private office added per V4/V6 layout adjustments, close to Microfinance team", "pax": "1 Pax", "dimensions": "Private Suite (~11 Sqm)", "contractorNotes": "Gypsum partition walls erected as per V4 plan modification", "contractorStatus": "In Progress", "bracConfirmation": "Confirmed", "notes": "Verify layout position next to Microfinance cluster", "photos": []}, {"id": "RM-16", "roomName": "Open Office Cluster - Programmes", "zone": "Primary Operational", "status": "Ongoing", "brand": "Daspros SPC / Siemon CAT6A", "torSpecs": "Open workspace for 24 pax (6 clusters with 1 extra expansion seat), window facade desk counter", "pax": "24 Pax", "dimensions": "Open Wing (~110 Sqm)", "contractorNotes": "SPC floor screed prepared; cabling trunks laid along floor track", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Ensure low-height furniture used near window to maintain daylight", "photos": []}, {"id": "RM-17", "roomName": "Open Office Cluster - Microfinance", "zone": "Primary Operational", "status": "Ongoing", "brand": "Armstrong LED / Siemon CAT6A", "torSpecs": "Open workspace for 14 pax, CAT6A dual desk outlets, min 500 lux lighting level", "pax": "14 Pax", "dimensions": "Open Wing (~65 Sqm)", "contractorNotes": "Ceiling LED panel light grid hung above cluster zone", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Check spacing between cluster pods and passage walkway", "photos": []}, {"id": "RM-18", "roomName": "Open Office Cluster - UPGI", "zone": "Primary Operational", "status": "Ongoing", "brand": "Schneider / Daspros SPC", "torSpecs": "Open workspace for 11 pax, ergonomic workstation alignment, data floor boxes", "pax": "11 Pax", "dimensions": "Open Wing (~50 Sqm)", "contractorNotes": "Floor conduits pulled to data box positions", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Test floor box cover flushness with SPC tiles", "photos": []}, {"id": "RM-19", "roomName": "Divisible 60-Pax Main Boardroom", "zone": "Primary Operational", "status": "Ongoing", "brand": "Gyproc 45dB / Siemon CAT6A", "torSpecs": "Fixed partition design (V6 Settled), 3 sub-meeting rooms (2 x 10-12 pax, 1 x 20 pax), AV data points", "pax": "60 Pax Total", "dimensions": "Boardroom (~95 Sqm)", "contractorNotes": "Fixed acoustic drywall partitions built in place of folding dividers per V6", "contractorStatus": "In Progress", "bracConfirmation": "Confirmed", "notes": "Confirm AV presentation cabling conduits in central room", "photos": []}, {"id": "RM-20", "roomName": "Quiet Phone Booths / Soundproof Pods (8 Pods)", "zone": "Primary Operational", "status": "Not Started", "brand": "Custom Acoustic 45dB", "torSpecs": "8 soundproof booths (2 pax per pod), ventilation, power socket, >45dB acoustic mitigation", "pax": "16 Pax (2/pod)", "dimensions": "8 Small Pods", "contractorNotes": "Sub-floor wiring prepped; pre-fab pod assembly scheduled", "contractorStatus": "Scheduled", "bracConfirmation": "Pending Confirmation", "notes": "Perform acoustic sound leak check between adjacent pods", "photos": []}, {"id": "RM-21", "roomName": "Main Reception & Visitor Waiting Lounge", "zone": "Primary Operational", "status": "Pending", "brand": "Black Granite / Acrylic 3D Logo", "torSpecs": "Near main entrance, seating for 2-3 visitors, BRAC 3D acrylic branding wall, reception counter", "pax": "3 Visitors", "dimensions": "Entrance Area (~22 Sqm)", "contractorNotes": "Reception desk carcass delivered; wall prep for branding ongoing", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Inspect front counter granite top finish and logo backlighting", "photos": []}, {"id": "RM-22", "roomName": "Dedicated Service & Support Entrance Lobby", "zone": "Service & Support", "status": "Completed", "brand": "ZKTeco Biometric / UPVC Door", "torSpecs": "Separate access door from main reception, independent service entry for deliveries", "pax": "Service Flow", "dimensions": "Lobby Passage", "contractorNotes": "UPVC entrance door fixed with keycard access lock", "contractorStatus": "Completed", "bracConfirmation": "Confirmed", "notes": "Verify smooth swing and clearance for catering trolley carts", "photos": []}, {"id": "RM-23", "roomName": "Staff Cloakroom & Utility Room", "zone": "Service & Support", "status": "Completed", "brand": "Twyford Ceramic / Tronic Vent", "torSpecs": "Dedicated storage & cloakroom for 3 service staff, well-ventilated, durable floor tiles", "pax": "3 Staff", "dimensions": "Utility Room (~12 Sqm)", "contractorNotes": "Tiling complete; coat hooks and storage racks fitted", "contractorStatus": "Completed", "bracConfirmation": "Confirmed", "notes": "Ensure ventilation fan operates continuously", "photos": []}, {"id": "RM-24", "roomName": "Kitchenette & Dining Area", "zone": "Service & Support", "status": "Ongoing", "brand": "Granite Counter / Twyford Sink", "torSpecs": "Granite counter, sink, dishwasher connection, microwave/fridge plugs, dining seating space", "pax": "15 Dining Pax", "dimensions": "Kitchen/Dining (~35 Sqm)", "contractorNotes": "Granite counter slab set; plumbing first fix complete for sink & washer", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Test mechanical exhaust fan airflow over food prep area", "photos": []}, {"id": "RM-25", "roomName": "Mother's Room (Wellness Room)", "zone": "Service & Support", "status": "Ongoing", "brand": "Gyproc 45dB / Soft Lighting", "torSpecs": "Fitted for 3-seater couch, small fridge provision, power point, privacy lock", "pax": "Wellness", "dimensions": "Private Room (~9 Sqm)", "contractorNotes": "Drywall enclosure built; door lock set installed", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Check soft warm lighting fixture & acoustic door seal", "photos": []}, {"id": "RM-26", "roomName": "Lounge Room (Relaxation Area)", "zone": "Service & Support", "status": "Not Started", "brand": "Schneider Power / CAT6A", "torSpecs": "Space for 3-seater couch, bean bags, power & cable TV connectivity points", "pax": "Relaxation", "dimensions": "Lounge (~14 Sqm)", "contractorNotes": "Floor screed complete; wiring pulled for TV point", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Verify comfortable power socket height", "photos": []}, {"id": "RM-27", "roomName": "ICT Server Room (24/7 Cooled)", "zone": "Service & Support", "status": "Ongoing", "brand": "Haier HSU-18RC23CF / Cisco 9200L", "torSpecs": "42U rack space, MikroTik CCR1036 + Cisco 9200L stack, 2kW spare load, Haier 18k BTU A/C", "pax": "IT Hub", "dimensions": "Server Room (~12 Sqm)", "contractorNotes": "Dedicated DB circuit run; Haier A/C unit mounted on wall", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Conduct 24-hour A/C cooling and temperature alarm test", "photos": []}, {"id": "RM-28", "roomName": "General Storage & Future Server Expansion Room", "zone": "Service & Support", "status": "Pending", "brand": "Steel Shelving / Lockset", "torSpecs": "Lockable general storage with electrical load & duct readiness for future server migration", "pax": "Storage", "dimensions": "Store (~16 Sqm)", "contractorNotes": "Heavy duty shelving brackets anchored to masonry wall", "contractorStatus": "In Progress", "bracConfirmation": "Pending Confirmation", "notes": "Confirm lock cylinder key authority distribution", "photos": []}];
+
+        let baseSnags = JSON.parse(JSON.stringify(defaultBaseSnags));
+        let roomSnags = JSON.parse(JSON.stringify(defaultRoomSnags));
+        baseSnags.forEach(s => s.photos = []);
+        roomSnags.forEach(s => s.photos = []);
+
+        const uploading = {};   // "ws:ID" -> number of photos currently uploading
+        let pendingSaves = 0;   // saves/uploads in flight (pauses auto-refresh so nothing is overwritten)
+        let lastSync = null;
+        let firstLoad = true;
+
+        const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const listOf = ws => ws === 'base' ? baseSnags : roomSnags;
+        const findItem = (ws, id) => listOf(ws).find(s => s.id === id);
+        const thumbUrl = (fileId, w) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w${w}`;
+
+        /* ---------- Cloud I/O ---------- */
+        async function fetchWithTimeout(url, opts, ms) {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), ms);
+            try { return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal })); }
+            finally { clearTimeout(t); }
+        }
+
+        async function postJSON(payload, ms) {
+            const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            }, ms || 45000);
+            const data = await res.json();
+            if (data.status !== 'success') {
+                const err = new Error(data.message || 'Server error');
+                err.code = data.code; err.photos = data.photos;
+                throw err;
+            }
+            return data;
+        }
+
+        function applyCloud(data) {
+            let changed = false;
+            [['base', baseSnags], ['rooms', roomSnags]].forEach(([k, list]) => {
+                const m = data[k] || {};
+                list.forEach(s => {
+                    const c = m[s.id];
+                    if (!c) return;
+                    const before = JSON.stringify([s.status, s.brand, s.contractorStatus, s.bracConfirmation, s.notes, s.photos]);
+                    if (c.status) s.status = c.status;
+                    if (c.contractorStatus) s.contractorStatus = c.contractorStatus;
+                    if (c.bracConfirmation) s.bracConfirmation = c.bracConfirmation;
+                    s.brand = c.brand;
+                    s.notes = c.notes;
+                    s.photos = c.photos || [];
+                    if (before !== JSON.stringify([s.status, s.brand, s.contractorStatus, s.bracConfirmation, s.notes, s.photos])) changed = true;
+                });
+            });
+            return changed;
+        }
+
+        async function loadFromCloud(manual) {
+            if (pendingSaves > 0) return;
+            setSync('syncing');
+            try {
+                const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=getAll&t=' + Date.now(), {}, 30000);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Bad response');
+                try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
+                const changed = applyCloud(data);
+                lastSync = new Date();
+                setSync('ok');
+                if (changed || firstLoad) refreshView();
+                firstLoad = false;
+                if (manual) showToast('Refreshed from Google Sheet & Drive.');
+            } catch (err) {
+                console.error('Cloud load failed:', err);
+                setSync('offline');
+                if (manual) showToast('Could not reach Google - showing last saved data.');
+            }
+        }
+
+        function setSync(state) {
+            const el = document.getElementById('sync-status');
+            if (!el) return;
+            const base = 'text-xs px-3 py-1.5 rounded-xl font-mono flex items-center space-x-1.5 border ';
+            if (state === 'syncing') {
+                el.className = base + 'text-amber-300 bg-amber-950 border-amber-800';
+                el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Syncing...</span>';
+            } else if (state === 'ok') {
+                const t = lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                el.className = base + 'text-emerald-300 bg-emerald-950 border-emerald-800';
+                el.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i><span>Live &middot; ${t}</span>`;
+            } else {
+                el.className = base + 'text-rose-300 bg-rose-950 border-rose-800';
+                el.innerHTML = '<i class="fa-solid fa-cloud-bolt"></i><span>Offline - saved data</span>';
+            }
+        }
+
+        function updateBadges() {
+            document.getElementById('badge-base').innerText = baseSnags.length;
+            document.getElementById('badge-rooms').innerText = roomSnags.length;
+            const all = [...baseSnags, ...roomSnags];
+            const done = all.filter(s => s.status === 'Completed' || s.bracConfirmation === 'Confirmed').length;
+            const pct = all.length === 0 ? 0 : Math.round((done / all.length) * 100);
+            document.getElementById('completion-rate').innerText = pct + '% Resolved';
+            document.getElementById('progress-bar').style.width = pct + '%';
+        }
+
+        function switchWorkspace(ws) {
+            currentWorkspace = ws;
+            ['base', 'rooms'].forEach(k => {
+                document.getElementById('nav-' + k).className = k === ws ?
+                    "flex-1 lg:flex-none flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl text-xs font-semibold bg-teal-900 text-white shadow-md transition-all" :
+                    "flex-1 lg:flex-none flex items-center justify-between px-3 sm:px-4 py-3 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-all";
+            });
+            renderWorkspace();
+        }
+
+        /* ---------- Field edits (only the changed field is sent, so devices never overwrite each other) ---------- */
+        function updateItem(ws, idx, field, value) {
+            const s = listOf(ws)[idx];
+            s[field] = value;
+            updateBadges();
+            pendingSaves++;
+            setSync('syncing');
+            postJSON({ action: 'updateStatus', workspace: ws, id: s.id, [field]: value })
+                .then(() => showToast(s.id + ' saved to Google Sheet.'))
+                .catch(err => { console.error(err); showToast('Save FAILED for ' + s.id + ' - check connection and retry.'); })
+                .finally(() => { pendingSaves--; if (pendingSaves === 0) setSync(lastSync ? 'ok' : 'offline'); });
+        }
+
+        /* ---------- Photos: up to 5 per item, several at once, stored in Drive ---------- */
+        const pk = (ws, id) => ws + ':' + id;
+
+        function readAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = () => reject(new Error('Could not read file'));
+                r.readAsDataURL(file);
+            });
+        }
+
+        function compressImage(file, maxDim, quality) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+                    const c = document.createElement('canvas');
+                    c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    URL.revokeObjectURL(url);
+                    resolve({ dataUrl: c.toDataURL('image/jpeg', quality), mime: 'image/jpeg' });
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+                img.src = url;
+            });
+        }
+
+        async function prepareFile(file) {
+            const LIMIT = 8 * 1024 * 1024;
+            if (file.type === 'application/pdf') {
+                if (file.size > LIMIT) throw new Error('PDF too large (max 8 MB)');
+                return { dataUrl: await readAsDataURL(file), mime: 'application/pdf' };
+            }
+            try { return await compressImage(file, 1600, 0.8); }
+            catch (e) {
+                if (file.size > LIMIT) throw new Error('Image could not be processed');
+                return { dataUrl: await readAsDataURL(file), mime: file.type || 'image/jpeg' };
+            }
+        }
+
+        async function handlePhotoUpload(ws, id, input) {
+            const files = Array.from(input.files || []);
+            input.value = '';
+            if (!files.length) return;
+            const s = findItem(ws, id);
+            const k = pk(ws, id);
+            const free = MAX_PHOTOS - (s.photos.length + (uploading[k] || 0));
+            if (free <= 0) { alert('Maximum of ' + MAX_PHOTOS + ' photos reached for ' + id + '.'); return; }
+            const queue = files.slice(0, free);
+            if (files.length > free) alert('Only ' + free + ' more photo(s) allowed for ' + id + ' (max ' + MAX_PHOTOS + '). The first ' + free + ' will be uploaded.');
+
+            uploading[k] = (uploading[k] || 0) + queue.length;
+            refreshPhotoCell(ws, id);
+            pendingSaves++;
+            setSync('syncing');
+            let ok = 0, fail = 0, lastErr = '';
+
+            for (const file of queue) {
+                try {
+                    const prepared = await prepareFile(file);
+                    const data = await postJSON({
+                        action: 'uploadImage', workspace: ws, id: id,
+                        itemLabel: ws === 'base' ? s.desc : s.roomName,
+                        base64Data: prepared.dataUrl, mimeType: prepared.mime
+                    }, 120000);
+                    s.photos = data.photos; ok++;
+                } catch (err) {
+                    console.error('Upload failed:', err);
+                    fail++; lastErr = err.message;
+                    if (err.photos) s.photos = err.photos;
+                }
+                uploading[k]--;
+                refreshPhotoCell(ws, id);
+            }
+            pendingSaves--;
+            setSync(lastSync ? 'ok' : 'offline');
+            if (fail === 0) showToast(ok + ' photo(s) saved to Drive for ' + id + '.');
+            else showToast(ok + ' saved, ' + fail + ' FAILED (' + lastErr + '). Not stored - please retry.');
+        }
+
+        async function removePhoto(ws, id, fileId) {
+            if (!confirm('Remove this photo? It will be moved to the Drive trash.')) return;
+            const s = findItem(ws, id);
+            pendingSaves++;
+            try {
+                const data = await postJSON({ action: 'deletePhoto', workspace: ws, id: id, fileId: fileId });
+                s.photos = data.photos;
+                showToast('Photo removed.');
+            } catch (err) {
+                console.error(err);
+                showToast('Could not remove photo - check connection.');
+            }
+            pendingSaves--;
+            refreshPhotoCell(ws, id);
+        }
+
+        function photoCellHTML(ws, s) {
+            const photos = s.photos || [];
+            const up = uploading[pk(ws, s.id)] || 0;
+            const used = photos.length + up;
+            const thumbs = photos.map((p, i) => `
+                <div class="relative w-11 h-11 shrink-0">
+                    <button onclick="openPreview('${ws}','${s.id}',${i})" class="relative w-11 h-11 rounded-lg overflow-hidden border border-teal-200 bg-teal-50 flex items-center justify-center">
+                        <span class="text-[10px] font-bold text-teal-800">#${i + 1}</span>
+                        <img src="${thumbUrl(p.id, 200)}" loading="lazy" alt="Photo ${i + 1}" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">
+                    </button>
+                    <button onclick="removePhoto('${ws}','${s.id}','${p.id}')" title="Remove photo" class="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] leading-4 text-center shadow">&times;</button>
+                </div>`).join('');
+            const spinners = Array(up).fill(`
+                <div class="w-11 h-11 rounded-lg border border-dashed border-teal-400 bg-teal-50 flex items-center justify-center">
+                    <i class="fa-solid fa-spinner fa-spin text-teal-700"></i>
+                </div>`).join('');
+            const action = used < MAX_PHOTOS ? `
+                <label class="cursor-pointer inline-flex items-center px-2.5 py-1 bg-teal-900 hover:bg-teal-800 text-white rounded text-[11px] font-semibold shadow">
+                    <i class="fa-solid fa-camera mr-1"></i> Add Photos (${used}/${MAX_PHOTOS})
+                    <input type="file" multiple accept="image/*,.pdf" class="hidden" onchange="handlePhotoUpload('${ws}','${s.id}',this)">
+                </label>` : `<span class="text-[10px] text-amber-600 font-semibold">Max ${MAX_PHOTOS} photos reached</span>`;
+            return `<div class="flex flex-wrap gap-1.5 mb-1.5">${thumbs}${spinners}</div>${action}`;
+        }
+
+        function refreshPhotoCell(ws, id) {
+            const el = document.getElementById('ph-' + ws + '-' + id);
+            const s = findItem(ws, id);
+            if (el && s) el.innerHTML = photoCellHTML(ws, s);
+        }
+
+        /* ---------- Preview gallery ---------- */
+        let pv = { ws: null, id: null, i: 0 };
+
+        function openPreview(ws, id, i) {
+            pv = { ws, id, i };
+            renderPreview();
+            document.getElementById('preview-modal').classList.remove('hidden');
+        }
+
+        function stepPreview(d) {
+            const n = findItem(pv.ws, pv.id).photos.length;
+            if (!n) return;
+            pv.i = (pv.i + d + n) % n;
+            renderPreview();
+        }
+
+        function renderPreview() {
+            const photos = findItem(pv.ws, pv.id).photos;
+            const body = document.getElementById('preview-body');
+            if (!photos.length) { closePreviewModal(); return; }
+            if (pv.i >= photos.length) pv.i = 0;
+            const p = photos[pv.i];
+            document.getElementById('preview-title').innerText = `Evidence - ${pv.id} (${pv.i + 1}/${photos.length})`;
+            body.innerHTML = `
+                <div class="w-full text-center space-y-3">
+                    <img src="${thumbUrl(p.id, 1600)}" alt="Evidence photo" class="max-h-[380px] object-contain rounded-lg border shadow-sm mx-auto" onerror="this.alt='Preview not available - open in Drive'">
+                    <div class="flex items-center justify-center space-x-2">
+                        <button onclick="stepPreview(-1)" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg text-xs font-semibold"><i class="fa-solid fa-chevron-left"></i></button>
+                        <a href="${p.url}" target="_blank" rel="noopener" class="inline-flex items-center space-x-2 px-4 py-1.5 bg-teal-900 text-white text-xs rounded-lg shadow hover:bg-teal-800"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>Open in Google Drive</span></a>
+                        <button onclick="stepPreview(1)" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg text-xs font-semibold"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>`;
+        }
+
+        function closePreviewModal() { document.getElementById('preview-modal').classList.add('hidden'); }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3500);
+        }
+
+        /* ---------- Rendering ---------- */
+        function selectHTML(options, value, onchange) {
+            return `<select onchange="${onchange}" class="bg-slate-100 border rounded-lg px-2 py-1 text-xs font-semibold">` +
+                options.map(o => `<option value="${esc(o)}" ${value === o ? 'selected' : ''}>${esc(o)}</option>`).join('') + `</select>`;
+        }
+        const STATUS_OPTS = ['Not Started', 'Ongoing', 'Pending', 'Completed'];
+        const CONFIRM_OPTS = ['Pending Confirmation', 'Confirmed', 'Rejected'];
+
+        function refreshView() {
+            updateBadges();
+            const a = document.activeElement;
+            const typing = a && document.getElementById('main-content').contains(a) && (a.tagName === 'INPUT' || a.tagName === 'SELECT');
+            if (typing) { listOf(currentWorkspace).forEach(s => refreshPhotoCell(currentWorkspace, s.id)); }
+            else { renderWorkspace(); }
+        }
+
+        function renderWorkspace() {
+            const container = document.getElementById('main-content');
+            if (currentWorkspace === 'base') renderBaseWorkspace(container); else renderRoomsWorkspace(container);
+            updateBadges();
+        }
+
+        function renderBaseWorkspace(container) {
+            container.innerHTML = `
+                <div class="flex items-center justify-between bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">1) Entire Floor Base Fit-Out Works (BoQ V6)</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Pre-compartmentation works: screed, SPC flooring, walling, ceilings, MEP first/second fix, and AC units.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                        <span class="font-bold text-xs text-slate-700">Base Floor Master Register (${baseSnags.length} Items)</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse min-w-[1150px]">
+                            <thead>
+                                <tr class="bg-slate-100 border-b font-bold text-slate-600 uppercase text-[10px]">
+                                    <th class="p-3 pl-5 w-16">Ref ID</th>
+                                    <th class="p-3">BoQ Description / Element</th>
+                                    <th class="p-3 w-32">Category</th>
+                                    <th class="p-3 w-28">Status</th>
+                                    <th class="p-3 w-36">Brand / Make</th>
+                                    <th class="p-3 w-16">Unit</th>
+                                    <th class="p-3 w-16">Qty</th>
+                                    <th class="p-3 w-36">Contractor Status</th>
+                                    <th class="p-3 w-36">BRAC Contentment</th>
+                                    <th class="p-3 w-64">Photos (max ${MAX_PHOTOS}, Drive)</th>
+                                    <th class="p-3 pr-5 w-48">BRAC Verification Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                ${baseSnags.map((s, idx) => `
+                                    <tr class="hover:bg-slate-50 align-top">
+                                        <td class="p-3 pl-5 font-mono font-bold text-teal-900">${esc(s.id)}</td>
+                                        <td class="p-3 font-medium text-slate-900">${esc(s.desc)}</td>
+                                        <td class="p-3 text-slate-600">${esc(s.category)}</td>
+                                        <td class="p-3">${selectHTML(STATUS_OPTS, s.status, `updateItem('base',${idx},'status',this.value)`)}</td>
+                                        <td class="p-3"><input type="text" value="${esc(s.brand)}" onchange="updateItem('base',${idx},'brand',this.value)" class="w-full bg-slate-50 border rounded-lg px-2 py-1 text-xs"></td>
+                                        <td class="p-3 font-semibold text-slate-600">${esc(s.unit)}</td>
+                                        <td class="p-3 font-mono">${esc(s.qty)}</td>
+                                        <td class="p-3"><input type="text" value="${esc(s.contractorStatus)}" onchange="updateItem('base',${idx},'contractorStatus',this.value)" class="w-full bg-slate-50 border rounded-lg px-2 py-1 text-xs"></td>
+                                        <td class="p-3">${selectHTML(CONFIRM_OPTS, s.bracConfirmation, `updateItem('base',${idx},'bracConfirmation',this.value)`)}</td>
+                                        <td class="p-3" id="ph-base-${esc(s.id)}">${photoCellHTML('base', s)}</td>
+                                        <td class="p-3 pr-5"><input type="text" value="${esc(s.notes)}" onchange="updateItem('base',${idx},'notes',this.value)" class="w-full bg-slate-50 border rounded-lg px-2 py-1 text-xs" placeholder="Add verification note..."></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
+        function renderRoomsWorkspace(container) {
+            container.innerHTML = `
+                <div class="flex items-center justify-between bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">2) Compartment & Room Audit (ToR & Option 04 Layout)</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Room-by-room inspection checklist aligned with functional zoning, room dimensions, and brand specifications.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                        <span class="font-bold text-xs text-slate-700">Room Audit Register (${roomSnags.length} Spaces)</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse min-w-[1250px]">
+                            <thead>
+                                <tr class="bg-slate-100 border-b font-bold text-slate-600 uppercase text-[10px]">
+                                    <th class="p-3 pl-5 w-16">Ref ID</th>
+                                    <th class="p-3">Compartment / Room Name</th>
+                                    <th class="p-3 w-32">Zone</th>
+                                    <th class="p-3 w-28">Status</th>
+                                    <th class="p-3 w-36">Brand / Make</th>
+                                    <th class="p-3">ToR Specifications</th>
+                                    <th class="p-3 w-16">Pax</th>
+                                    <th class="p-3 w-28">Dimensions</th>
+                                    <th class="p-3 w-36">BRAC Contentment</th>
+                                    <th class="p-3 w-64">Photos (max ${MAX_PHOTOS}, Drive)</th>
+                                    <th class="p-3 pr-5 w-48">BRAC Sign-Off Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                ${roomSnags.map((s, idx) => `
+                                    <tr class="hover:bg-slate-50 align-top">
+                                        <td class="p-3 pl-5 font-mono font-bold text-teal-900">${esc(s.id)}</td>
+                                        <td class="p-3 font-semibold text-slate-900">${esc(s.roomName)}</td>
+                                        <td class="p-3 text-slate-600">${esc(s.zone)}</td>
+                                        <td class="p-3">${selectHTML(STATUS_OPTS, s.status, `updateItem('rooms',${idx},'status',this.value)`)}</td>
+                                        <td class="p-3"><input type="text" value="${esc(s.brand)}" onchange="updateItem('rooms',${idx},'brand',this.value)" class="w-full bg-slate-50 border rounded-lg px-2 py-1 text-xs"></td>
+                                        <td class="p-3 text-slate-600 text-[11px]">${esc(s.torSpecs)}</td>
+                                        <td class="p-3 font-semibold">${esc(s.pax)}</td>
+                                        <td class="p-3 font-mono text-slate-600">${esc(s.dimensions)}</td>
+                                        <td class="p-3">${selectHTML(CONFIRM_OPTS, s.bracConfirmation, `updateItem('rooms',${idx},'bracConfirmation',this.value)`)}</td>
+                                        <td class="p-3" id="ph-rooms-${esc(s.id)}">${photoCellHTML('rooms', s)}</td>
+                                        <td class="p-3 pr-5"><input type="text" value="${esc(s.notes)}" onchange="updateItem('rooms',${idx},'notes',this.value)" class="w-full bg-slate-50 border rounded-lg px-2 py-1 text-xs" placeholder="Add sign-off remark..."></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
+        /* ---------- Start-up: show last saved cloud data instantly, then fetch fresh data ---------- */
+        try { const cached = JSON.parse(localStorage.getItem(CACHE_KEY)); if (cached && cached.status === 'success') applyCloud(cached); } catch (e) {}
+        setSync('syncing');
+        renderWorkspace();
+        loadFromCloud(false);
+        setInterval(() => { if (!document.hidden) loadFromCloud(false); }, 30000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) loadFromCloud(false); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreviewModal(); });
+    </script>
+</body>
+</html>
